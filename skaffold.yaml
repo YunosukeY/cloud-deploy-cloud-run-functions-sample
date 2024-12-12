@@ -22,28 +22,34 @@ customActions:
         args:
           - "-c"
           - |-
+            LATEST_REVISION=$(gcloud run revisions list --region=asia-northeast1 --service=go-http-function --format="value(REVISION)" --limit=1)
+
             if [ \"$CLOUD_DEPLOY_FEATURES\" = \"CANARY\" ] \
               && [ \"$CLOUD_DEPLOY_PERCENTAGE_DEPLOY\" -ne 100 ] \
-              && ! gcloud functions describe go-http-function --region=asia-northeast1 > /dev/null 2>&1; then
+              && [ -z \"$LATEST_REVISION\" ]; then
               echo {\"resultStatus\": \"SKIPPED\"} > results.json
               gcloud storage cp results.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/results.json
               exit 0
             fi
 
-            apt-get update
-            apt-get install -y git
+            if [ \"$LATEST_REVISION\" != \"go-http-function-$CLOUD_DEPLOY_customTarget_commit\" ]; then
+              apt-get update
+              apt-get install -y git
 
-            git clone https://github.com/YunosukeY/cloud-deploy-cloud-run-functions-sample.git
-            cd cloud-deploy-cloud-run-functions-sample
-            git checkout $CLOUD_DEPLOY_customTarget_commit
+              git clone https://github.com/YunosukeY/cloud-deploy-cloud-run-functions-sample.git
+              cd cloud-deploy-cloud-run-functions-sample
+              git checkout $CLOUD_DEPLOY_customTarget_commit
 
-            gcloud beta run deploy go-http-function \
-              --base-image go122 \
-              --region asia-northeast1 \
-              --source . \
-              --function HelloGet \
-              --no-allow-unauthenticated \
-              --no-traffic
+              gcloud beta run deploy go-http-function \
+                --base-image go122 \
+                --region asia-northeast1 \
+                --source . \
+                --function HelloGet \
+                --no-allow-unauthenticated \
+                --no-traffic \
+                --revision-suffix $CLOUD_DEPLOY_customTarget_commit
+            fi
+
             gcloud run services update-traffic go-http-function \
               --region asia-northeast1 \
               --to-revisions=LATEST=$CLOUD_DEPLOY_PERCENTAGE_DEPLOY

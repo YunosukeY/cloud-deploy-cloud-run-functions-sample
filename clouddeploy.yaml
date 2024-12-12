@@ -9,8 +9,12 @@ serialPipeline:
         canary:
           customCanaryDeployment:
             phaseConfigs:
+              - phaseId: canary-25
+                percentage: 25
               - phaseId: canary-50
                 percentage: 50
+              - phaseId: canary-75
+                percentage: 75
               - phaseId: stable
                 percentage: 100
 ---
