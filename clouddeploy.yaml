@@ -5,6 +5,14 @@ metadata:
 serialPipeline:
   stages:
     - targetId: sample-env
+      strategy:
+        canary:
+          customCanaryDeployment:
+            phaseConfigs:
+              - phaseId: canary-50
+                percentage: 50
+              - phaseId: stable
+                percentage: 100
 ---
 apiVersion: deploy.cloud.google.com/v1
 kind: Target

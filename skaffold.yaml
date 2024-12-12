@@ -12,11 +12,7 @@ customActions:
             echo {\"commit\": \"$CLOUD_DEPLOY_customTarget_commit\"} > manifest.json
             gcloud storage cp manifest.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/manifest.json
 
-            if [ \"$CLOUD_DEPLOY_FEATURES\" = \"CANARY\" ]; then
-              echo {\"resultStatus\": \"FAILED\", \"manifestFile\": \"$CLOUD_DEPLOY_OUTPUT_GCS_PATH/manifest.json\"} > results.json
-            else
-              echo {\"resultStatus\": \"SUCCEEDED\", \"manifestFile\": \"$CLOUD_DEPLOY_OUTPUT_GCS_PATH/manifest.json\"} > results.json
-            fi
+            echo {\"resultStatus\": \"SUCCEEDED\", \"manifestFile\": \"$CLOUD_DEPLOY_OUTPUT_GCS_PATH/manifest.json\"} > results.json
             gcloud storage cp results.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/results.json
   - name: cloud-run-functions-deployer
     containers:
@@ -26,8 +22,10 @@ customActions:
         args:
           - "-c"
           - |-
-            if [ \"$CLOUD_DEPLOY_FEATURES\" = \"CANARY\" ]; then
-              echo {\"resultStatus\": \"FAILED\"} > results.json
+            if [ \"$CLOUD_DEPLOY_FEATURES\" = \"CANARY\" ] \
+              && [ \"$CLOUD_DEPLOY_PERCENTAGE_DEPLOY\" -ne 100 ] \
+              && ! gcloud functions describe go-http-function --region=asia-northeast1 > /dev/null 2>&1; then
+              echo {\"resultStatus\": \"SKIPPED\"} > results.json
               gcloud storage cp results.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/results.json
               exit 0
             fi
@@ -39,14 +37,16 @@ customActions:
             cd cloud-deploy-cloud-run-functions-sample
             git checkout $CLOUD_DEPLOY_customTarget_commit
 
-            gcloud functions deploy go-http-function \
-              --gen2 \
-              --runtime=go123 \
-              --region=asia-northeast1 \
-              --source=. \
-              --entry-point=HelloGet \
-              --trigger-http \
-              --no-allow-unauthenticated
+            gcloud beta run deploy go-http-function \
+              --base-image go122 \
+              --region asia-northeast1 \
+              --source . \
+              --function HelloGet \
+              --no-allow-unauthenticated \
+              --no-traffic
+            gcloud run services update-traffic go-http-function \
+              --region asia-northeast1 \
+              --to-revisions=LATEST=$CLOUD_DEPLOY_PERCENTAGE_DEPLOY
 
             echo {\"resultStatus\": \"SUCCEEDED\"} > results.json
             gcloud storage cp results.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/results.json
