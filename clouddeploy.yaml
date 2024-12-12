@@ -1,0 +1,22 @@
+apiVersion: deploy.cloud.google.com/v1
+kind: DeliveryPipeline
+metadata:
+  name: cloud-run-functions-pipeline
+serialPipeline:
+  stages:
+    - targetId: sample-env
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+  name: sample-env
+customTarget:
+  customTargetType: cloud-run-functions
+---
+apiVersion: deploy.cloud.google.com/v1
+kind: CustomTargetType
+metadata:
+  name: cloud-run-functions
+customActions:
+  renderAction: cloud-run-functions-renderer
+  deployAction: cloud-run-functions-deployer

@@ -1,0 +1,52 @@
+apiVersion: skaffold/v4beta7
+kind: Config
+customActions:
+  - name: cloud-run-functions-renderer
+    containers:
+      - name: render
+        image: gcr.io/google.com/cloudsdktool/google-cloud-cli:503.0.0-stable
+        command: ["/bin/bash"]
+        args:
+          - "-c"
+          - |-
+            echo {\"commit\": \"$CLOUD_DEPLOY_customTarget_commit\"} > manifest.json
+            gcloud storage cp manifest.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/manifest.json
+
+            if [ \"$CLOUD_DEPLOY_FEATURES\" = \"CANARY\" ]; then
+              echo {\"resultStatus\": \"FAILED\", \"manifestFile\": \"$CLOUD_DEPLOY_OUTPUT_GCS_PATH/manifest.json\"} > results.json
+            else
+              echo {\"resultStatus\": \"SUCCEEDED\", \"manifestFile\": \"$CLOUD_DEPLOY_OUTPUT_GCS_PATH/manifest.json\"} > results.json
+            fi
+            gcloud storage cp results.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/results.json
+  - name: cloud-run-functions-deployer
+    containers:
+      - name: deploy
+        image: gcr.io/google.com/cloudsdktool/google-cloud-cli:503.0.0-stable
+        command: ["/bin/bash"]
+        args:
+          - "-c"
+          - |-
+            if [ \"$CLOUD_DEPLOY_FEATURES\" = \"CANARY\" ]; then
+              echo {\"resultStatus\": \"FAILED\"} > results.json
+              gcloud storage cp results.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/results.json
+              exit 0
+            fi
+
+            apt-get update
+            apt-get install -y git
+
+            git clone https://github.com/YunosukeY/cloud-deploy-cloud-run-functions-sample.git
+            cd cloud-deploy-cloud-run-functions-sample
+            git checkout $CLOUD_DEPLOY_customTarget_commit
+
+            gcloud functions deploy go-http-function \
+              --gen2 \
+              --runtime=go123 \
+              --region=asia-northeast1 \
+              --source=. \
+              --entry-point=HelloGet \
+              --trigger-http \
+              --no-allow-unauthenticated
+
+            echo {\"resultStatus\": \"SUCCEEDED\"} > results.json
+            gcloud storage cp results.json $CLOUD_DEPLOY_OUTPUT_GCS_PATH/results.json
